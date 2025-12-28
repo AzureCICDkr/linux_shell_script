@@ -1,14 +1,18 @@
 ```text
 Architecture
 ------------
-Host OS
-├─ Docker
-├─ QEMU / KVM
-│  ├─ k8s-control-plane
-│  └─ k8s-worker-node
-└─ Observability
-   ├─ Prometheus
-   └─ Grafana
+linux_shell_script
+├── docker-script
+│   └── installdocker
+├── etc
+│   └── installqemu
+├── k8s-script
+│   ├── installcontrolplane
+│   └── installworkernode
+└── observability-script
+    ├── grfanascript
+    │   └── installgrafana
+    └── prometheusscript
 
 
 Execution
