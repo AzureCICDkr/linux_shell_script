@@ -1,0 +1,76 @@
+#!/bin/bash
+
+
+
+
+
+# grafana user/group
+sudo useradd -r -s /usr/sbin/nologin grafana
+
+# directory
+sudo mkdir -p /usr/local/grafana
+sudo mkdir -p /etc/grafana
+sudo mkdir -p /var/lib/grafana
+sudo mkdir -p /var/log/grafana
+
+sudo chown -R grafana:grafana /usr/local/grafana
+sudo chown -R grafana:grafana /etc/grafana
+sudo chown -R grafana:grafana /var/lib/grafana
+sudo chown -R grafana:grafana /var/log/grafana
+
+# download
+cd /tmp
+
+sudo wget https://dl.grafana.com/grafana-enterprise/release/12.3.1/grafana-enterprise_12.3.1_20271043721_linux_amd64.tar.gz
+
+sudo tar -xvzr grafana-enterprise_12.3.1_20271043721_linux_amd64.tar.gz 
+
+sudo cp -r grafana-v12.3.1/* /usr/local/grafana/
+
+sudo chown -R grafana:grafana /usr/local/grafana
+
+# config
+sudo tee /etc/grafana/grafana.ini > /dev/null <<EOF
+[server]
+http_addr = 0.0.0.0
+http_port = 3000
+
+[paths]
+data = /var/lib/grafana
+logs = /var/log/grafana
+plugins = /var/lib/grafana/plugins
+EOF
+
+# systemd service
+sudo tee /etc/systemd/system/grafana.service > /dev/null <<EOF
+[Unit]
+Description=Grafana Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grafana
+Group=grafana
+ExecStart=/usr/local/grafana/bin/grafana-server \
+  --config=/etc/grafana/grafana.ini \
+  --homepath=/usr/local/grafana
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# start
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable grafana
+sudo systemctl start grafana
+
+#check 
+sudo systemctl status grafana --no-pager
+
+
+
