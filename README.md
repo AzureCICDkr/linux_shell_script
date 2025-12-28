@@ -1,17 +1,18 @@
-#구조
-[ Host OS ]
-   |
-   |-- Docker
-   |
-   |-- QEMU / KVM
-   |     ├─ k8s-control-plane
-   |     └─ k8s-worker-node
-   |
-   |-- Observability
-         ├─ Prometheus
-         └─ Grafana
+```text
+Architecture
+------------
+Host OS
+├─ Docker
+├─ QEMU / KVM
+│  ├─ k8s-control-plane
+│  └─ k8s-worker-node
+└─ Observability
+   ├─ Prometheus
+   └─ Grafana
 
-         
+
+Execution
+---------
 # Docker
 chmod +x docker-script/installdocker
 sudo docker-script/installdocker
