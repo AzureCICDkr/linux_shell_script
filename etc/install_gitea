@@ -1,0 +1,153 @@
+#!/bin/bash
+set -e
+
+# =========================
+# 1) Git 설치 (Ubuntu)
+# - Git 자체는 "서비스"가 아니라 CLI 툴이라 보통 서비스로 띄우지 않음
+# - 다만 git:// 프로토콜 제공이 필요하면 git-daemon을 서비스로 띄울 수 있음(아래 포함)
+# =========================
+apt-get update -y
+apt-get install -y git git-daemon-sysvinit ca-certificates curl
+
+# git 바이너리 확인
+git --version
+
+# =========================
+# 2) git-daemon 서비스 (선택: git:// 읽기 전용 제공)
+# - 필요 없으면 아래 systemd 생성 부분을 지워도 됨
+# - 기본 repo root: /var/lib/git
+# =========================
+adduser --system --group --home /var/lib/git --shell /usr/sbin/nologin git || true
+mkdir -p /var/lib/git/repositories
+chown -R git:git /var/lib/git
+chmod 755 /var/lib/git /var/lib/git/repositories
+
+cat > /etc/systemd/system/git-daemon.service <<'EOF'
+[Unit]
+Description=Git Daemon (git://)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/var/lib/git
+ExecStart=/usr/lib/git-core/git-daemon --verbose --reuseaddr --base-path=/var/lib/git/repositories --export-all --enable=receive-pack --informative-errors --listen=0.0.0.0 --port=9418 /var/lib/git/repositories
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now git-daemon
+
+# =========================
+# 3) Gitea 바이너리 다운로드 + 서비스 실행
+# - 버전/아키텍처 하드코딩: 1.22.6 + linux-amd64
+# - 필요하면 URL의 버전만 바꾸면 됨
+# =========================
+adduser --system --group --home /home/git --shell /bin/bash git || true
+
+mkdir -p /etc/gitea
+mkdir -p /var/lib/gitea
+mkdir -p /var/lib/gitea/custom
+mkdir -p /var/lib/gitea/data
+mkdir -p /var/lib/gitea/repositories
+mkdir -p /var/log/gitea
+
+chown -R git:git /var/lib/gitea /var/log/gitea
+chmod 750 /var/lib/gitea /var/log/gitea
+chown root:git /etc/gitea
+chmod 770 /etc/gitea
+
+curl -fL https://github.com/go-gitea/gitea/releases/download/v1.22.6/gitea-1.22.6-linux-amd64 -o /usr/local/bin/gitea
+chmod 755 /usr/local/bin/gitea
+
+# app.ini (없으면 생성)
+if [ ! -f /etc/gitea/app.ini ]; then
+cat > /etc/gitea/app.ini <<'EOF'
+APP_NAME = Gitea
+RUN_USER = git
+RUN_MODE = prod
+
+[server]
+PROTOCOL = http
+DOMAIN = localhost
+HTTP_PORT = 3000
+ROOT_URL = http://localhost:3000/
+SSH_DOMAIN = localhost
+START_SSH_SERVER = true
+SSH_LISTEN_PORT = 2222
+OFFLINE_MODE = false
+
+[database]
+DB_TYPE = sqlite3
+PATH = /var/lib/gitea/data/gitea.db
+
+[repository]
+ROOT = /var/lib/gitea/repositories
+
+[log]
+MODE = file
+LEVEL = info
+ROOT_PATH = /var/log/gitea
+EOF
+  chown root:git /etc/gitea/app.ini
+  chmod 640 /etc/gitea/app.ini
+fi
+
+
+sudo chown git:git /etc/gitea/app.ini
+sudo chmod 640 /etc/gitea/app.ini
+
+
+cat > /etc/systemd/system/gitea.service <<'EOF'
+[Unit]
+Description=Gitea
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/var/lib/gitea
+
+Environment=GITEA_CUSTOM=/var/lib/gitea/custom
+Environment=GITEA_WORK_DIR=/var/lib/gitea
+Environment=GITEA_APP_INI=/etc/gitea/app.ini
+
+ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/gitea /var/log/gitea /etc/gitea
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now gitea
+
+# =========================
+# 4) 상태 출력
+# =========================
+systemctl --no-pager --full status git-daemon || true
+systemctl --no-pager --full status gitea || true
+
+echo
+echo "Gitea: http://<server-ip>:3000"
+echo "Gitea SSH: ssh -p 2222 git@<server-ip>"
+echo "Git daemon (git://): git://<server-ip>:9418/"
+

@@ -1,0 +1,159 @@
+#!/bin/bash
+set -e
+
+# =========================
+# Git (binary) 설치
+# =========================
+
+apt-get update -y
+apt-get install -y curl ca-certificates libssl3 libcurl4 libexpat1 zlib1g perl
+
+curl -L https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.45.2.tar.gz -o /tmp/git.tar.gz
+tar -xzf /tmp/git.tar.gz -C /tmp
+
+cd /tmp/git-2.45.2
+make configure
+./configure --prefix=/usr/local
+make -j$(nproc)
+make install
+
+/usr/local/bin/git --version
+
+# =========================
+# git-daemon 서비스
+# =========================
+
+adduser --system --group --home /var/lib/git --shell /usr/sbin/nologin git || true
+
+mkdir -p /var/lib/git/repositories
+chown -R git:git /var/lib/git
+chmod 755 /var/lib/git /var/lib/git/repositories
+
+cat > /etc/systemd/system/git-daemon.service <<'EOF'
+[Unit]
+Description=Git Daemon (git://)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/var/lib/git
+ExecStart=/usr/local/bin/git daemon \
+  --verbose \
+  --reuseaddr \
+  --base-path=/var/lib/git/repositories \
+  --export-all \
+  --enable=receive-pack \
+  --informative-errors \
+  --listen=0.0.0.0 \
+  --port=9418 \
+  /var/lib/git/repositories
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now git-daemon
+
+# =========================
+# Gitea (binary) 설치
+# =========================
+
+adduser --system --group --home /home/git --shell /bin/bash git || true
+
+mkdir -p /etc/gitea
+mkdir -p /var/lib/gitea/{custom,data,repositories}
+mkdir -p /var/log/gitea
+
+chown -R git:git /var/lib/gitea /var/log/gitea
+chown root:git /etc/gitea
+chmod 750 /var/lib/gitea /var/log/gitea
+chmod 770 /etc/gitea
+
+curl -L https://github.com/go-gitea/gitea/releases/download/v1.22.6/gitea-1.22.6-linux-amd64 \
+  -o /usr/local/bin/gitea
+chmod 755 /usr/local/bin/gitea
+
+cat > /etc/gitea/app.ini <<'EOF'
+APP_NAME = Gitea
+RUN_USER = git
+RUN_MODE = prod
+
+[server]
+PROTOCOL = http
+DOMAIN = localhost
+HTTP_PORT = 3000
+ROOT_URL = http://localhost:3000/
+SSH_DOMAIN = localhost
+START_SSH_SERVER = true
+SSH_LISTEN_PORT = 2222
+
+[database]
+DB_TYPE = sqlite3
+PATH = /var/lib/gitea/data/gitea.db
+
+[repository]
+ROOT = /var/lib/gitea/repositories
+
+[log]
+MODE = file
+LEVEL = info
+ROOT_PATH = /var/log/gitea
+EOF
+
+chown root:git /etc/gitea/app.ini
+chmod 640 /etc/gitea/app.ini
+
+cat > /etc/systemd/system/gitea.service <<'EOF'
+[Unit]
+Description=Gitea
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/var/lib/gitea
+
+Environment=GITEA_CUSTOM=/var/lib/gitea/custom
+Environment=GITEA_WORK_DIR=/var/lib/gitea
+Environment=GITEA_APP_INI=/etc/gitea/app.ini
+
+ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/gitea /var/log/gitea /etc/gitea
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now gitea
+
+# =========================
+# Status
+# =========================
+
+systemctl --no-pager status git-daemon || true
+systemctl --no-pager status gitea || true
+
+echo
+echo "Gitea Web  : http://<server-ip>:3000"
+echo "Gitea SSH  : ssh -p 2222 git@<server-ip>"
+echo "Git Daemon : git://<server-ip>:9418/"
+
