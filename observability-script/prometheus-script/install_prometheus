@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# 1) user/group
+sudo useradd -r -s /usr/sbin/nologin prometheus
+
+# 2) directories
+sudo mkdir -p /etc/prometheus
+sudo mkdir -p /var/lib/prometheus
+
+# 3) download (Prometheus 3.8.1 linux-amd64)
+cd /tmp
+wget https://github.com/prometheus/prometheus/releases/download/v3.8.1/prometheus-3.8.1.linux-amd64.tar.gz
+
+# 4) extract
+tar -xzf prometheus-3.8.1.linux-amd64.tar.gz
+
+# 5) install binaries
+sudo cp /tmp/prometheus-3.8.1.linux-amd64/prometheus /usr/local/bin/prometheus
+sudo cp /tmp/prometheus-3.8.1.linux-amd64/promtool /usr/local/bin/promtool
+
+# 6) install console templates
+sudo mkdir -p /etc/prometheus/consoles
+sudo mkdir -p /etc/prometheus/console_libraries
+sudo cp -r /tmp/prometheus-3.8.1.linux-amd64/consoles/* /etc/prometheus/consoles/
+sudo cp -r /tmp/prometheus-3.8.1.linux-amd64/console_libraries/* /etc/prometheus/console_libraries/
+
+# 7) config (scrape self)
+sudo tee /etc/prometheus/prometheus.yml > /dev/null <<'EOF'
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+EOF
+
+# 8) ownership
+sudo chown -R prometheus:prometheus /etc/prometheus
+sudo chown -R prometheus:prometheus /var/lib/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/promtool
+sudo chmod 755 /usr/local/bin/prometheus /usr/local/bin/promtool
+
+# 9) systemd service
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<'EOF'
+[Unit]
+Description=Prometheus Monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --web.listen-address=0.0.0.0:9090 \
+  --web.console.templates=/etc/prometheus/consoles \
+  --web.console.libraries=/etc/prometheus/console_libraries \
+  --web.enable-lifecycle
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 10) start
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable prometheus
+sudo systemctl start prometheus
+
+# 11) show status once and exit
+systemctl status prometheus --no-pager -n 20
+

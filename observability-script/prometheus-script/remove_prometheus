@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# 1) stop & disable service
+sudo systemctl stop prometheus
+sudo systemctl disable prometheus
+
+# 2) remove systemd service file
+sudo rm -f /etc/systemd/system/prometheus.service
+
+# 3) reload systemd
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+
+# 4) remove binaries
+sudo rm -f /usr/local/bin/prometheus
+sudo rm -f /usr/local/bin/promtool
+
+# 5) remove config & data
+sudo rm -rf /etc/prometheus
+sudo rm -rf /var/lib/prometheus
+
+# 6) remove prometheus user (optional but recommended)
+sudo userdel prometheus 2>/dev/null
+
+# 7) verify
+echo "Prometheus removed."
+ss -lntp | grep 9090 || echo "Port 9090 closed."
+
