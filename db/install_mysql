@@ -1,0 +1,124 @@
+#!/bin/bash
+set -e
+
+####################################
+# 1. MySQL 사용자 생성
+####################################
+id mysql &>/dev/null || useradd -r -s /bin/false mysql
+
+####################################
+# 2. 디렉터리 생성
+####################################
+sudo mkdir -p /opt/mysql
+sudo mkdir -p /var/lib/mysql
+sudo mkdir -p /var/log/mysql
+sudo mkdir -p /etc/mysql
+sudo mkdir -p /var/run/mysqld
+
+sudo chown -R mysql:mysql /var/lib/mysql /var/log/mysql /var/run/mysqld
+
+####################################
+# 3. MySQL 바이너리 다운로드
+####################################
+cd /tmp
+#wget https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.37-linux-glibc2.28-x86_64.tar.xz
+
+#sudo tar xf mysql-8.0.37-linux-glibc2.28-x86_64.tar.xz
+#sudo mv mysql-8.0.37-linux-glibc2.28-x86_64/* /opt/mysql
+
+sudo apt update
+sudo apt install -y libaio1t64
+
+
+####################################
+# 4. PATH 등록
+####################################
+sudo  ln -sf /opt/mysql/bin/mysql /usr/local/bin/mysql
+sudo ln -sf /opt/mysql/bin/mysqld /usr/local/bin/mysqld
+
+####################################
+# 5. MySQL 설정 파일
+####################################
+cat <<EOF >/etc/mysql/my.cnf
+[mysqld]
+basedir=/opt/mysql
+datadir=/var/lib/mysql
+socket=/var/run/mysqld/mysqld.sock
+pid-file=/var/run/mysqld/mysqld.pid
+log-error=/var/log/mysql/error.log
+port=3306
+user=mysql
+bind-address=0.0.0.0
+
+[client]
+socket=/var/run/mysqld/mysqld.sock
+EOF
+
+####################################
+# 6. 데이터 디렉터리 초기화
+####################################
+/opt/mysql/bin/mysqld \
+  --defaults-file=/etc/mysql/my.cnf \
+  --initialize-insecure \
+  --user=mysql
+
+####################################
+# 7. systemd 서비스 파일
+####################################
+cat <<EOF >/etc/systemd/system/mysql.service
+[Unit]
+Description=MySQL Server (Binary Install)
+After=network.target
+
+[Service]
+Type=simple
+User=mysql
+Group=mysql
+ExecStart=/opt/mysql/bin/mysqld --defaults-file=/etc/mysql/my.cnf
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+####################################
+# 8. 서비스 시작
+####################################
+systemctl daemon-reload
+systemctl enable mysql
+systemctl start mysql
+
+echo "⏳ MySQL 기동 대기 중..."
+sleep 10
+
+####################################
+# 9. DB / 유저 생성 여부 확인
+####################################
+echo
+read -rp "📦 데이터베이스와 유저를 생성하시겠습니까? (y/n): " CREATE_DB
+
+if [[ "$CREATE_DB" == "y" || "$CREATE_DB" == "Y" ]]; then
+    read -rp "📘 생성할 DB(Schema) 이름: " DB_NAME
+    read -rp "👤 생성할 유저명: " DB_USER
+    read -rsp "🔐 유저 비밀번호: " DB_PASS
+    echo
+
+    mysql -u root <<EOF
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASS}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
+FLUSH PRIVILEGES;
+EOF
+
+    echo "✅ DB 및 유저 생성 완료"
+else
+    echo "➡️ DB 생성 단계 건너뜀"
+fi
+
+####################################
+# 10. 서비스 상태 출력
+####################################
+systemctl status mysql --no-pager
+

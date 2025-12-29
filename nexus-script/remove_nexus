@@ -1,0 +1,61 @@
+#!/bin/bash
+set -e
+
+echo "⚠️ Nexus Repository OSS 바이너리 설치 환경을 삭제합니다."
+echo
+
+####################################
+# 1. 서비스 중지
+####################################
+if systemctl is-active --quiet nexus; then
+    systemctl stop nexus
+    echo "🛑 nexus 서비스 중지"
+fi
+
+if systemctl is-enabled --quiet nexus; then
+    systemctl disable nexus
+    echo "❌ nexus 서비스 disable"
+fi
+
+####################################
+# 2. systemd 서비스 파일 삭제
+####################################
+if [ -f /etc/systemd/system/nexus.service ]; then
+    rm -f /etc/systemd/system/nexus.service
+    echo "🗑 nexus.service 삭제"
+fi
+
+systemctl daemon-reload
+
+####################################
+# 3. Nexus 바이너리 및 데이터 삭제
+####################################
+rm -rf /opt/nexus
+rm -rf /var/nexus
+rm -rf /var/log/nexus
+
+echo "🗑 Nexus 바이너리 / 데이터 / 로그 삭제"
+
+####################################
+# 4. nexus 유저 삭제 여부
+####################################
+echo
+read -rp "👤 nexus 시스템 유저도 삭제할까요? (y/n): " REMOVE_USER
+
+if [[ "$REMOVE_USER" == "y" || "$REMOVE_USER" == "Y" ]]; then
+    if id nexus &>/dev/null; then
+        userdel nexus
+        echo "✅ nexus 유저 삭제 완료"
+    else
+        echo "ℹ️ nexus 유저가 존재하지 않습니다"
+    fi
+else
+    echo "➡️ nexus 유저 삭제 생략"
+fi
+
+####################################
+# 5. 최종 확인
+####################################
+echo
+echo "🎉 Nexus Repository OSS 삭제 완료"
+

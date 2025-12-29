@@ -1,0 +1,71 @@
+#!/bin/bash
+set -e
+
+echo "⚠️ MySQL 바이너리 설치 환경을 삭제합니다."
+echo
+
+####################################
+# 1. 서비스 중지
+####################################
+if systemctl is-active --quiet mysql; then
+    systemctl stop mysql
+    echo "🛑 mysql 서비스 중지"
+fi
+
+if systemctl is-enabled --quiet mysql; then
+    systemctl disable mysql
+    echo "❌ mysql 서비스 disable"
+fi
+
+####################################
+# 2. systemd 서비스 파일 삭제
+####################################
+if [ -f /etc/systemd/system/mysql.service ]; then
+    rm -f /etc/systemd/system/mysql.service
+    echo "🗑 mysql.service 삭제"
+fi
+
+systemctl daemon-reload
+
+####################################
+# 3. 바이너리 및 링크 삭제
+####################################
+rm -rf /opt/mysql
+rm -f /usr/local/bin/mysql
+rm -f /usr/local/bin/mysqld
+
+echo "🗑 MySQL 바이너리 삭제"
+
+####################################
+# 4. 설정 / 데이터 / 로그 삭제
+####################################
+rm -rf /etc/mysql
+rm -rf /var/lib/mysql
+rm -rf /var/log/mysql
+rm -rf /var/run/mysqld
+
+echo "🗑 MySQL 설정 / 데이터 / 로그 삭제"
+
+####################################
+# 5. mysql 유저 삭제 여부
+####################################
+echo
+read -rp "👤 mysql 시스템 유저도 삭제할까요? (y/n): " REMOVE_USER
+
+if [[ "$REMOVE_USER" == "y" || "$REMOVE_USER" == "Y" ]]; then
+    if id mysql &>/dev/null; then
+        userdel mysql
+        echo "✅ mysql 유저 삭제 완료"
+    else
+        echo "ℹ️ mysql 유저가 존재하지 않습니다"
+    fi
+else
+    echo "➡️ mysql 유저 삭제 생략"
+fi
+
+####################################
+# 6. 최종 확인
+####################################
+echo
+echo "🎉 MySQL 바이너리 기반 설치 환경 삭제 완료"
+

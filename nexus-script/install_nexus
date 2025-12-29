@@ -1,0 +1,73 @@
+#!/bin/bash
+set -e
+
+####################################
+# 1. nexus 유저 생성
+####################################
+id nexus &>/dev/null || useradd -r -s /bin/false nexus
+
+####################################
+# 2. 디렉터리 준비
+####################################
+mkdir -p /opt
+mkdir -p /var/nexus
+mkdir -p /var/log/nexus
+
+####################################
+# 3. Nexus 바이너리 다운로드
+####################################
+cd /tmp
+wget https://download.sonatype.com/nexus/3/nexus-3.68.1-01-unix.tar.gz
+
+####################################
+# 4. 압축 해제
+####################################
+tar xf nexus-3.68.1-01-unix.tar.gz
+mv nexus-3.68.1-01 /opt/nexus
+
+####################################
+# 5. 데이터 디렉터리 지정
+####################################
+echo 'nexus-data=/var/nexus' > /opt/nexus/bin/nexus.rc
+
+####################################
+# 6. 권한 설정
+####################################
+chown -R nexus:nexus /opt/nexus /var/nexus /var/log/nexus
+
+####################################
+# 7. systemd 서비스 파일 생성
+####################################
+cat <<EOF >/etc/systemd/system/nexus.service
+[Unit]
+Description=Nexus Repository OSS
+After=network.target
+
+[Service]
+Type=forking
+User=nexus
+Group=nexus
+LimitNOFILE=65536
+
+ExecStart=/opt/nexus/bin/nexus start
+ExecStop=/opt/nexus/bin/nexus stop
+
+Restart=on-abort
+TimeoutSec=600
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+####################################
+# 8. systemd 반영 및 실행
+####################################
+systemctl daemon-reload
+systemctl enable nexus
+systemctl start nexus
+
+####################################
+# 9. 상태 확인
+####################################
+systemctl status nexus --no-pager
+

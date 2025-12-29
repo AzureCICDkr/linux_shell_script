@@ -1,0 +1,70 @@
+#!/bin/bash
+set -e
+
+echo "🔧 SonarQube (Docker) 실행을 위한 VM 필수 OS 설정 시작"
+echo
+
+############################################
+# 1. vm.max_map_count 설정 (필수)
+############################################
+REQUIRED_MAP_COUNT=262144
+CURRENT_MAP_COUNT=$(sysctl -n vm.max_map_count)
+
+echo "📌 vm.max_map_count 현재 값: $CURRENT_MAP_COUNT"
+
+if [ "$CURRENT_MAP_COUNT" -lt "$REQUIRED_MAP_COUNT" ]; then
+    echo "➡️ vm.max_map_count 값을 $REQUIRED_MAP_COUNT 로 설정합니다"
+
+    echo "vm.max_map_count=$REQUIRED_MAP_COUNT" \
+      | sudo tee /etc/sysctl.d/99-sonarqube.conf > /dev/null
+
+    sudo sysctl --system
+else
+    echo "✅ vm.max_map_count 이미 충족됨"
+fi
+
+############################################
+# 2. swap 비활성화 (강력 권장)
+############################################
+if swapon --show | grep -q '^'; then
+    echo "⚠️ swap이 활성화되어 있습니다 → 비활성화합니다"
+
+    sudo swapoff -a
+    sudo sed -i '/swap/d' /etc/fstab
+
+    echo "✅ swap 비활성화 완료"
+else
+    echo "✅ swap 이미 비활성화 상태"
+fi
+
+############################################
+# 3. 파일 디스크립터 제한 확인
+############################################
+NOFILE_LIMIT=$(ulimit -n)
+
+echo "📌 현재 nofile 제한: $NOFILE_LIMIT"
+
+if [ "$NOFILE_LIMIT" -lt 65536 ]; then
+    echo "⚠️ nofile 제한이 낮습니다"
+    echo "➡️ Docker 컨테이너 ulimit 설정으로 보완해야 합니다"
+else
+    echo "✅ nofile 제한 충분"
+fi
+
+############################################
+# 4. 메모리 상태 확인 (정보 출력)
+############################################
+echo
+echo "📊 VM 메모리 상태"
+free -h
+
+############################################
+# 5. 최종 요약
+############################################
+echo
+echo "🎉 SonarQube용 VM 필수 설정 완료"
+echo
+echo "✔ vm.max_map_count = $(sysctl -n vm.max_map_count)"
+echo "✔ swap 상태:"
+swapon --show || echo "  (swap 없음)"
+
