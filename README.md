@@ -3,16 +3,32 @@ Architecture
 ------------
 linux_shell_script
 ├── docker-script
-│   └── installdocker
+│   └── install_docker
+│
 ├── etc
-│   └── installqemu
+│   ├── install_gitea
+│   ├── install_qemu
+│   └── setup_git_gitea_binary
+│
 ├── k8s-script
-│   ├── installcontrolplane
-│   └── installworkernode
+│   ├── install_control_plane
+│   ├── install_remote_kubectl
+│   ├── install_worker_node
+│   └── resetk8snode
+│
 └── observability-script
-    ├── grfanascript
-    │   └── installgrafana
-    └── prometheusscript
+    ├── grafana-script
+    │   └── install_grafana
+    │
+    └── prometheus-script
+        ├── common-script
+        │   ├── install_alert_manager
+        │   ├── install_blackbox_exporter
+        │   ├── install_mysql_exporter
+        │   └── install_node_exporter
+        │
+        ├── install_prometheus
+        └── remove_prometheus
 
 
 Execution
