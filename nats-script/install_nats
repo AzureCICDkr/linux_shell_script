@@ -1,0 +1,72 @@
+#!/bin/bash
+set -e
+
+echo "== NATS 설치 시작 =="
+
+# 1. nats 유저 생성
+if ! id nats >/dev/null 2>&1; then
+  sudo useradd -r -s /bin/false nats
+fi
+
+# 2. 디렉터리 생성
+sudo mkdir -p /opt/nats
+sudo mkdir -p /etc/nats
+sudo mkdir -p /var/lib/nats/jetstream
+sudo mkdir -p /var/log/nats
+
+cd /tmp
+
+# 3. NATS 바이너리 다운로드 (Linux amd64)
+sudo wget https://github.com/nats-io/nats-server/releases/download/v2.10.18/nats-server-v2.10.18-linux-amd64.tar.gz
+sudo tar xzf nats-server-v2.10.18-linux-amd64.tar.gz
+
+# 4. 바이너리 복사
+sudo cp nats-server-v2.10.18-linux-amd64/nats-server /opt/nats/
+
+# 5. 설정 파일 생성 (JetStream 활성화)
+sudo tee /etc/nats/nats.conf >/dev/null <<EOF
+port: 4222
+http: 8222
+
+jetstream {
+  store_dir: /var/lib/nats/jetstream
+  max_mem_store: 1GB
+  max_file_store: 10GB
+}
+
+log_file: /var/log/nats/nats.log
+EOF
+
+# 6. 권한 설정
+sudo chown -R nats:nats /opt/nats
+sudo chown -R nats:nats /etc/nats
+sudo chown -R nats:nats /var/lib/nats
+sudo chown -R nats:nats /var/log/nats
+
+# 7. systemd 서비스 파일 생성
+sudo tee /etc/systemd/system/nats.service >/dev/null <<EOF
+[Unit]
+Description=NATS Messaging Server (JetStream Enabled)
+After=network.target
+
+[Service]
+User=nats
+Group=nats
+ExecStart=/opt/nats/nats-server -c /etc/nats/nats.conf
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=always
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 8. systemd 반영 및 실행
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable nats
+sudo systemctl start nats
+
+echo "== NATS 설치 완료 =="
+echo "상태 확인: sudo systemctl status nats"
+
