@@ -1,55 +1,58 @@
 #!/bin/bash
 set -e
 
-echo "== Redis 설치 시작 =="
+echo "Redis 소스 빌드 및 설치 시작"
 
-# 1. redis 유저 생성 (없으면)
+# 1️⃣ 빌드 도구 설치
+sudo apt update -y
+sudo apt install -y build-essential tcl wget
+
+# 2️⃣ redis 사용자 생성
 if ! id redis >/dev/null 2>&1; then
-  useradd -r -s /bin/false redis
+  sudo useradd -r -s /bin/false redis
 fi
 
-# 2. 디렉터리 생성
-mkdir -p /opt/redis
-mkdir -p /etc/redis
-mkdir -p /var/lib/redis
-mkdir -p /var/log/redis
+# 3️⃣ 디렉터리 생성
+sudo mkdir -p /opt/redis
+sudo mkdir -p /var/lib/redis
+sudo mkdir -p /etc/redis
 
+sudo chown redis:redis /var/lib/redis
+
+# 4️⃣ Redis 소스 다운로드
 cd /tmp
+sudo wget https://download.redis.io/releases/redis-7.2.4.tar.gz
+sudo tar xzf redis-7.2.4.tar.gz
 
-# 3. Redis 다운로드
-wget http://download.redis.io/releases/redis-7.2.4.tar.gz
-tar xzf redis-7.2.4.tar.gz
-
-# 4. 빌드
+# 5️⃣ 빌드
 cd redis-7.2.4
-make -j$(nproc)
+sudo make
 
-# 5. 바이너리 복사
-cp src/redis-server /opt/redis/
-cp src/redis-cli /opt/redis/
+# 6️⃣ 바이너리 설치
+sudo cp src/redis-server /opt/redis/redis-server
+sudo cp src/redis-cli /opt/redis/redis-cli
 
-# 6. redis.conf 생성
-cat <<EOF >/etc/redis/redis.conf
+sudo chmod +x /opt/redis/redis-server
+sudo chmod +x /opt/redis/redis-cli
+
+# 7️⃣ redis.conf 생성
+sudo tee /etc/redis/redis.conf > /dev/null <<EOF
 bind 0.0.0.0
 port 6379
-daemonize no
-supervised systemd
+
 dir /var/lib/redis
-logfile /var/log/redis/redis.log
-save 900 1
-save 300 10
-save 60 10000
+dbfilename dump.rdb
+
+protected-mode no
+supervised systemd
+
 appendonly yes
 EOF
 
-# 7. 권한 설정
-chown -R redis:redis /opt/redis
-chown -R redis:redis /etc/redis
-chown -R redis:redis /var/lib/redis
-chown -R redis:redis /var/log/redis
+sudo chown redis:redis /etc/redis/redis.conf
 
-# 8. systemd 서비스 파일 생성
-cat <<EOF >/etc/systemd/system/redis.service
+# 8️⃣ systemd 서비스 파일 생성
+sudo tee /etc/systemd/system/redis.service > /dev/null <<EOF
 [Unit]
 Description=Redis In-Memory Data Store
 After=network.target
@@ -60,18 +63,17 @@ Group=redis
 ExecStart=/opt/redis/redis-server /etc/redis/redis.conf
 ExecStop=/opt/redis/redis-cli shutdown
 Restart=always
-LimitNOFILE=100000
+LimitNOFILE=10000
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 9. systemd 반영
-systemctl daemon-reexec
-systemctl daemon-reload
-systemctl enable redis
-systemctl start redis
+# 9️⃣ systemd 등록 및 실행
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable redis
+sudo systemctl restart redis
 
-echo "== Redis 설치 완료 =="
-echo "상태 확인: systemctl status redis"
+echo "Redis 빌드 및 서비스 실행 완료"
 

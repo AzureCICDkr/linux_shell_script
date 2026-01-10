@@ -30,8 +30,8 @@ http: 8222
 
 jetstream {
   store_dir: /var/lib/nats/jetstream
-  max_mem_store: 1GB
-  max_file_store: 10GB
+  max_mem_store: 500MB
+  max_file_store: 3GB
 }
 
 log_file: /var/log/nats/nats.log
